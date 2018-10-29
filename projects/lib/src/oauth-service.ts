@@ -66,6 +66,8 @@ export class OAuthService extends AuthConfig {
      */
     public state?= '';
 
+    public disableNonceCheck = false;
+
     private eventsSubject: Subject<OAuthEvent> = new Subject<OAuthEvent>();
     private discoveryDocumentLoadedSubject: Subject<object> = new Subject<
         object
@@ -1332,6 +1334,18 @@ export class OAuthService extends AuthConfig {
         let code = codeParam.length ? codeParam[0].split('code=')[1] : undefined;
 
         if (code) {
+          const stateParameter = window.location.search.split('&')[1].replace('?', '').split('=');
+          let nonceInState = '';
+          if (stateParameter[0] === 'state') {
+            nonceInState = stateParameter[1];
+          }
+
+          if (!this.disableNonceCheck && !this.validateNonceFromState(nonceInState)) {
+            const event = new OAuthErrorEvent('invalid_nonce_in_state', null);
+            this.eventsSubject.next(event);
+            return Promise.reject('invalid_nonce_in_state');
+          }
+
           return new Promise((resolve, reject) => {
             this.getTokenFromCode(code).then(result => {
               resolve();
@@ -1415,10 +1429,7 @@ export class OAuthService extends AuthConfig {
         }
 
         if (this.requestAccessToken && !options.disableOAuth2StateCheck) {
-            const success = this.validateNonceForAccessToken(
-                accessToken,
-                nonceInState
-            );
+            const success = this.validateNonceFromState(nonceInState);
             if (!success) {
                 const event = new OAuthErrorEvent('invalid_nonce_in_state', null);
                 this.eventsSubject.next(event);
@@ -1477,8 +1488,7 @@ export class OAuthService extends AuthConfig {
             });
     }
 
-    private validateNonceForAccessToken(
-        accessToken: string,
+    private validateNonceFromState(
         nonceInState: string
     ): boolean {
         const savedNonce = this._storage.getItem('nonce');
