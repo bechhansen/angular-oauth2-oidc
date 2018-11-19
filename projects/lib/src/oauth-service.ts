@@ -1093,7 +1093,7 @@ export class OAuthService extends AuthConfig {
 
         let nonce = null;
         if (!this.disableNonceCheck) {
-          let nonce = this.createAndSaveNonce();
+          nonce = this.createAndSaveNonce();
           if (state) {
             state = nonce + this.config.nonceStateSeparator + state;
           } else {
