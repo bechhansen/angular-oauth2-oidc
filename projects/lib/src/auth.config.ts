@@ -215,6 +215,11 @@ export class AuthConfig {
   */
   public useHttpBasicAuthForPasswordFlow? = false;
 
+  /*
+   * set this to true to use HTTP BASIC auth for authorization code flow in Ory Hydra
+  */
+ public useHttpBasicAuthForAuthorizationCodeFlowOryHydra? = false;
+
   public disableNonceCheck? = false;
 
   constructor(json?: Partial<AuthConfig>) {

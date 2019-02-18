@@ -19,6 +19,8 @@ export class UrlHelperService {
       hash = hash.substr(1);
     }
 
+    console.log(this.parseQueryString(hash));
+
     return this.parseQueryString(hash);
   }
 
