@@ -215,6 +215,11 @@ export class AuthConfig {
   */
   public useHttpBasicAuthForPasswordFlow? = false;
 
+  /*
+   * set this to true to use HTTP BASIC auth for authorization code flow
+  */
+ public useHttpBasicAuthForAuthorizationCodeFlow? = false;
+
   public disableNonceCheck? = false;
 
   constructor(json?: Partial<AuthConfig>) {

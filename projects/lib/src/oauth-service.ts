@@ -719,18 +719,27 @@ export class OAuthService extends AuthConfig {
       }
 
       return new Promise((resolve, reject) => {
-        params = params.set('client_id', this.clientId);
-
-              if (this.customQueryParams) {
-                  for (const key of Object.getOwnPropertyNames(this.customQueryParams)) {
-                      params = params.set(key, this.customQueryParams[key]);
-                  }
-              }
-
-              const headers = new HttpHeaders().set(
-                  'Content-Type',
-                  'application/x-www-form-urlencoded'
-              );
+        if (!this.useHttpBasicAuthForAuthorizationCodeFlow) {
+            params = params.set('client_id', this.clientId);
+        }
+        if (this.customQueryParams) {
+            for (const key of Object.getOwnPropertyNames(this.customQueryParams)) {
+                params = params.set(key, this.customQueryParams[key]);
+            }
+        }
+        let headers = new HttpHeaders().set(
+            'Content-Type',
+            'application/x-www-form-urlencoded');
+         
+        if (this.useHttpBasicAuthForAuthorizationCodeFlow) {
+            headers = headers.append(
+                'Accept',
+                'application/json');
+            const header = btoa(`${this.clientId}:${this.dummyClientSecret}`);
+            headers = headers.append(
+                'Authorization',
+                'BASIC ' + header);
+        }
 
         this.http.post<TokenResponse>(this.tokenEndpoint, params, { headers }).subscribe(
           (tokenResponse) => {
@@ -1093,7 +1102,7 @@ export class OAuthService extends AuthConfig {
 
         let nonce = null;
         if (!this.disableNonceCheck) {
-          let nonce = this.createAndSaveNonce();
+          nonce = this.createAndSaveNonce();
           if (state) {
             state = nonce + this.config.nonceStateSeparator + state;
           } else {
@@ -1353,7 +1362,7 @@ export class OAuthService extends AuthConfig {
      * @param options Optinal options.
      */
     private tryLoginImplicit(options: LoginOptions = null): Promise<void> {
-      options = options || {};
+        options = options || {};
 
         let parts: object;
 
