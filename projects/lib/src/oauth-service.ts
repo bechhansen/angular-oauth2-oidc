@@ -699,30 +699,18 @@ export class OAuthService extends AuthConfig {
       return this.fetchToken(params);
     }
 
-    public refreshTokenUsingState(state: string): Promise<object> {
-
-        let params = new HttpParams()
-          .set('grant_type', 'refresh_token')
-          .set('refresh_token', this._storage.getItem('refresh_token'))
-          .set('scope', this.scope);
-        if (this.dummyClientSecret) {
-          params = params.set('client_secret', this.dummyClientSecret);
-        }
-        return this.fetchTokenUsingState(params,state);
-      }
-
     /**
      * Get token using an intermediate code. Works for the Authorization Code flow.
      */
-    private getTokenFromCode(code: string,state: string): Promise<object> {
+    private getTokenFromCode(code: string): Promise<object> {
       let params = new HttpParams()
         .set('grant_type', 'authorization_code')
         .set('code', code)
         .set('redirect_uri', this.redirectUri);
-      return this.fetchTokenUsingState(params,state);
+      return this.fetchToken(params);
     }
 
-    private fetchTokenUsingState(params: HttpParams,state: string): Promise<object> {
+    private fetchToken(params: HttpParams): Promise<object> {
 
       if (!this.validateUrlForHttps(this.tokenEndpoint)) {
         throw new Error(
@@ -759,7 +747,7 @@ export class OAuthService extends AuthConfig {
             this.storeAccessTokenResponse(tokenResponse.access_token, tokenResponse.refresh_token, tokenResponse.expires_in, tokenResponse.scope);
 
             if (this.oidc && tokenResponse.id_token) {
-              this.processIdTokenState(tokenResponse.id_token, tokenResponse.access_token, state).
+              this.processIdToken(tokenResponse.id_token, tokenResponse.access_token).
                 then(result => {
                   this.storeIdToken(result);
 
@@ -790,63 +778,6 @@ export class OAuthService extends AuthConfig {
         );
       });
     }
-
-    private fetchToken(params: HttpParams): Promise<object> {
-
-        if (!this.validateUrlForHttps(this.tokenEndpoint)) {
-          throw new Error(
-            'tokenEndpoint must use Http. Also check property requireHttps.'
-          );
-        }
-  
-        return new Promise((resolve, reject) => {
-          params = params.set('client_id', this.clientId);
-          if (this.customQueryParams) {
-              for (const key of Object.getOwnPropertyNames(this.customQueryParams)) {
-                  params = params.set(key, this.customQueryParams[key]);
-              }
-          }
-          let headers = new HttpHeaders().set(
-              'Content-Type',
-              'application/x-www-form-urlencoded');
-        
-          this.http.post<TokenResponse>(this.tokenEndpoint, params, { headers }).subscribe(
-            (tokenResponse) => {
-              this.debug('refresh tokenResponse', tokenResponse);
-              this.storeAccessTokenResponse(tokenResponse.access_token, tokenResponse.refresh_token, tokenResponse.expires_in, tokenResponse.scope);
-  
-              if (this.oidc && tokenResponse.id_token) {
-                this.processIdToken(tokenResponse.id_token, tokenResponse.access_token).
-                  then(result => {
-                    this.storeIdToken(result);
-  
-                    this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
-                    this.eventsSubject.next(new OAuthSuccessEvent('token_refreshed'));
-  
-                    resolve(tokenResponse);
-                  })
-                  .catch(reason => {
-                    this.eventsSubject.next(new OAuthErrorEvent('token_validation_error', reason));
-                    console.error('Error validating tokens');
-                    console.error(reason);
-  
-                    reject(reason);
-                  });
-              } else {
-                this.eventsSubject.next(new OAuthSuccessEvent('token_received'));
-                this.eventsSubject.next(new OAuthSuccessEvent('token_refreshed'));
-  
-                resolve(tokenResponse);
-              }
-            },
-            (err) => {
-              console.error('Error getting token', err);
-              this.eventsSubject.next(new OAuthErrorEvent('token_refresh_error', err));
-              reject(err);
-            }
-          );
-        });
-      }
 
     private removeSilentRefreshEventListener(): void {
         if (this.silentRefreshPostMessageEventListener) {
@@ -1171,7 +1102,7 @@ export class OAuthService extends AuthConfig {
 
         let nonce = null;
         if (!this.disableNonceCheck) {
-          let nonce = this.createAndSaveNonce();
+          nonce = this.createAndSaveNonce();
           if (state) {
             state = nonce + this.config.nonceStateSeparator + state;
           } else {
@@ -1408,12 +1339,10 @@ export class OAuthService extends AuthConfig {
         let parameter = window.location.search.split("?")[1].split("&");
         let codeParam = parameter.filter(param => param.includes('code='));
         let code = codeParam.length ? codeParam[0].split('code=')[1] : undefined;
-        let stateParam = parameter.filter(param => param.includes('state='));
-        let state = stateParam.length ? stateParam[0].split('state=')[1] : undefined;
 
         if (code) {
           return new Promise((resolve, reject) => {
-            this.getTokenFromCode(code,state).then(result => {
+            this.getTokenFromCode(code).then(result => {
               resolve();
             }).catch(err => {
               reject(err);
@@ -1672,137 +1601,6 @@ export class OAuthService extends AuthConfig {
 
         if (!this.disableNonceCheck && claims.nonce !== savedNonce) {
           const err = 'Wrong nonce: ' + claims.nonce;
-          console.warn(err);
-          return Promise.reject(err);
-        }
-
-        if (
-            !this.disableAtHashCheck &&
-            this.requestAccessToken &&
-            !claims['at_hash']
-        ) {
-            const err = 'An at_hash is needed!';
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        const now = Date.now();
-        const issuedAtMSec = claims.iat * 1000;
-        const expiresAtMSec = claims.exp * 1000;
-        const tenMinutesInMsec = 1000 * 60 * 10;
-
-        if (
-            issuedAtMSec - tenMinutesInMsec >= now ||
-            expiresAtMSec + tenMinutesInMsec <= now
-        ) {
-            const err = 'Token has been expired';
-            console.error(err);
-            console.error({
-                now: now,
-                issuedAtMSec: issuedAtMSec,
-                expiresAtMSec: expiresAtMSec
-            });
-            return Promise.reject(err);
-        }
-
-        const validationParams: ValidationParams = {
-            accessToken: accessToken,
-            idToken: idToken,
-            jwks: this.jwks,
-            idTokenClaims: claims,
-            idTokenHeader: header,
-            loadKeys: () => this.loadJwks()
-        };
-
-        if (
-            !this.disableAtHashCheck &&
-            this.requestAccessToken &&
-            !this.checkAtHash(validationParams)
-        ) {
-            const err = 'Wrong at_hash';
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        return this.checkSignature(validationParams).then(_ => {
-            const result: ParsedIdToken = {
-                idToken: idToken,
-                idTokenClaims: claims,
-                idTokenClaimsJson: claimsJson,
-                idTokenHeader: header,
-                idTokenHeaderJson: headerJson,
-                idTokenExpiresAt: expiresAtMSec
-            };
-            return result;
-        });
-    }
-
-    /**
-     * @ignore
-     */
-    public processIdTokenState(
-        idToken: string,
-        accessToken: string,
-        state: string
-    ): Promise<ParsedIdToken> {
-        const tokenParts = idToken.split('.');
-        const headerBase64 = this.padBase64(tokenParts[0]);
-        const headerJson = b64DecodeUnicode(headerBase64);
-        const header = JSON.parse(headerJson);
-        const claimsBase64 = this.padBase64(tokenParts[1]);
-        const claimsJson = b64DecodeUnicode(claimsBase64);
-        const claims = JSON.parse(claimsJson);
-        const savedNonce = this._storage.getItem('nonce');
-
-        if (Array.isArray(claims.aud)) {
-            if (claims.aud.every(v => v !== this.clientId)) {
-                const err = 'Wrong audience: ' + claims.aud.join(',');
-                console.warn(err);
-                return Promise.reject(err);
-            }
-        } else {
-            if (claims.aud !== this.clientId) {
-                const err = 'Wrong audience: ' + claims.aud;
-                console.warn(err);
-                return Promise.reject(err);
-            }
-        }
-
-        if (!claims.sub) {
-            const err = 'No sub claim in id_token';
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        if (
-            this.sessionChecksEnabled &&
-            this.silentRefreshSubject &&
-            this.silentRefreshSubject !== claims['sub']
-        ) {
-            const err =
-                'After refreshing, we got an id_token for another user (sub). ' +
-                `Expected sub: ${this.silentRefreshSubject}, received sub: ${
-                claims['sub']
-                }`;
-
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        if (!claims.iat) {
-            const err = 'No iat claim in id_token';
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        if (claims.iss !== this.issuer) {
-            const err = 'Wrong issuer: ' + claims.iss;
-            console.warn(err);
-            return Promise.reject(err);
-        }
-
-        if (!this.disableNonceCheck && state !== savedNonce) {
-          const err = 'Wrong nonce: ' + state;
           console.warn(err);
           return Promise.reject(err);
         }
