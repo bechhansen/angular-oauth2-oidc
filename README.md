@@ -70,8 +70,8 @@ export const authConfig: AuthConfig = {
 Configure the OAuthService with this config object when the application starts up:
 
 ```TypeScript
-import { OAuthService } from 'angular-oauth2-oidc';
-import { JwksValidationHandler } from 'angular-oauth2-oidc';
+import { OAuthService } from 'angular-oauth2-oidc-codeflow';
+import { JwksValidationHandler } from 'angular-oauth2-oidc-codeflow';
 import { authConfig } from './auth.config';
 import { Component } from '@angular/core';
 
