@@ -1,3 +1,5 @@
+# Archiving this repository: Original angular-oauth2-oidc now does codeflow. Will request to add contextual parameters.
+
 # angular-oauth2-oidc-codeflow
 [![Build Status](https://travis-ci.org/bechhansen/angular-oauth2-oidc.svg?branch=master)](https://travis-ci.org/bechhansen/angular-oauth2-oidc)
 
