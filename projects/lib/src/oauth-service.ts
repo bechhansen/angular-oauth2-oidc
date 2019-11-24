@@ -1811,7 +1811,13 @@ export class OAuthService extends AuthConfig {
      * @param noRedirectToLogoutUrl
      */
     public logOut(noRedirectToLogoutUrl = false): void {
-        const id_token = this.getIdToken();
+        
+        let id_token : string;
+        
+        if(this.oidc) {
+            id_token = this.getIdToken();
+        }
+        
         this.clearStorage();
 
         this.silentRefreshSubject = null;
@@ -1824,7 +1830,7 @@ export class OAuthService extends AuthConfig {
         if (noRedirectToLogoutUrl) {
             return;
         }
-        if (!id_token) {
+        if (this.oidc && !id_token) {
             return;
         }
 
@@ -1838,18 +1844,25 @@ export class OAuthService extends AuthConfig {
 
         // For backward compatibility
         if (this.logoutUrl.indexOf('{{') > -1) {
-            logoutUrl = this.logoutUrl
-                .replace(/\{\{id_token\}\}/, id_token)
-                .replace(/\{\{client_id\}\}/, this.clientId);
+            logoutUrl = this.logoutUrl.replace(/\{\{client_id\}\}/, this.clientId);
+            if(this.oidc) {
+                logoutUrl = logoutUrl.replace(/\{\{id_token\}\}/, id_token);
+            }
         } else {
             logoutUrl =
                 this.logoutUrl +
-                (this.logoutUrl.indexOf('?') > -1 ? '&' : '?') +
-                'id_token_hint=' +
-                encodeURIComponent(id_token) +
-                '&post_logout_redirect_uri=' +
-                encodeURIComponent(this.postLogoutRedirectUri || this.redirectUri);
+                (this.logoutUrl.indexOf('?') > -1 ? '&' : '?');
+
+            let params = [];
+            if(this.oidc) {
+                params.push('id_token_hint=' + encodeURIComponent(id_token));
+            }
+                
+            params.push('post_logout_redirect_uri=' +
+                encodeURIComponent(this.postLogoutRedirectUri || this.redirectUri));
+            logoutUrl += params.join("&");
         }
+
         location.href = logoutUrl;
     }
 
